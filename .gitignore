@@ -1,0 +1,4 @@
+.env
+*.py[co]
+__pycache__
+output.txt
