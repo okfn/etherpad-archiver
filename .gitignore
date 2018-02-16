@@ -2,3 +2,7 @@
 *.py[co]
 __pycache__
 output.txt
+logfile
+*.bak
+dumps
+*.log

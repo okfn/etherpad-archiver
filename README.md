@@ -21,6 +21,7 @@ $ pip install -r requirements.txt
 ## Usage
 
 ```
+$ pipenv shell  # else you would need to manually export all variables in .env
 $ ./ethersave --help
 Usage: ethersave [OPTIONS] COMMAND [ARGS]...
 
