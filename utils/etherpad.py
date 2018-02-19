@@ -120,7 +120,7 @@ class EtherpadWrapper:
                 r = requests.get(pad_url, stream=True)
                 if r.status_code > 500:
                     with open('error.log', 'a') as myfile:
-                        myfile.write('[%s] %s' % (r.status_code, pad_url))
+                        myfile.write(pad_url)
                     click.echo(click.style('[%s]' % r.status_code, fg='orange'), nl=True)
                     return
                     # Those returning 5xx were crashing Etherpad upon access. Avoiding them for now.
