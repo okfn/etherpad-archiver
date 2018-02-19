@@ -4,6 +4,7 @@ import requests
 import MySQLdb
 import time
 import click
+import boto3
 import ipdb
 
 
@@ -69,18 +70,18 @@ class EtherpadWrapper:
         db.execute(query)
         return db.fetchone()[0]
 
-    def list_pads(self):
+    def list_pads(self, out_file=False):
         """Prints all pads found to STDOUT
         """
         db = self.get_pads()
-        for row in db.fetchall():
-            # Did this first to avoid values coming as nested tuples – turned out to be actual values
-            # try:
-            #     pad_name = eval((row[0]))[0]
-            # except:
-            #     pad_name = row[0]
-            pad_name = row[0]
-            print(pad_name)
+
+        if out_file:
+            with open(out_file, 'w') as out:
+                for row in db.fetchall():
+                    out.write(row[0])
+        else:
+            for row in db.fetchall():
+                print(row[0])
 
     def save_pads(self, location, list_file=False):
         """Saves all pads to disk
@@ -143,3 +144,44 @@ class EtherpadWrapper:
         except:
             click.echo(click.style('An error occured while saving pad "%s"' % pad, fg='red'), nl=True)
             pass
+
+
+    def dump_to_s3(self, directory, list_file):
+        s3_key = os.getenv('S3_KEY')
+        s3_secret = os.getenv('S3_SECRET')
+        s3_bucket = os.getenv('S3_BUCKET')
+
+        if not list_file:
+            list_file = 'pads.lst'
+            self.list_pads(out_file=list_file)
+
+        # s3 = tinys3.Connection(s3_key, s3_secret, default_bucket=s3_bucket)
+        # Create an S3 client
+        ## s3 = boto3.client(
+        ##     's3',
+        ##     aws_access_key_id=s3_key,
+        ##     aws_secret_access_key=s3_secret
+        ## )
+
+        s3 = boto3.resource(
+            's3',
+             aws_access_key_id=s3_key,
+             aws_secret_access_key=s3_secret
+        )
+        bucket = s3.Bucket(s3_bucket)
+
+        with open(list_file, 'r') as lst:
+            for pad in lst:
+                click.echo('Saving pad', nl=False)
+                click.echo(click.style(' %s ' % pad.rstrip(), bold=True), nl=False)
+
+                file_name = '%s/%s.txt' % (directory, pad.rstrip())
+                if not os.path.isfile(file_name):
+                    click.echo(click.style('%s not found' % file_name, fg='yellow'))
+                    continue
+                f = open(file_name, 'rb')
+                # s3.upload('p/%s' % pad.rstrip(), f, content_type='text/html')
+                # res = s3.Bucket(s3_bucket).put_object(Key='p/%s' % pad.rstrip(), Body=f, ContentType='text/html')
+                res = bucket.upload_file(file_name, 'p/%s' % pad.rstrip(), ExtraArgs={'ContentType': 'text/html; charset=utf-8'})
+                click.echo(click.style('[done]', fg='green'), nl=True)
+                # res = s3.upload_file(file_name, s3_bucket, 'p/%s' % pad.rstrip(), ContentType='text/html')
