@@ -42,12 +42,17 @@ class EtherpadWrapper:
 
     def get_pads(self):
         """Gets a list of all pads in the Etherpad instance
+        * should have key like pad:nameofpad
+        * value should be valid json (or at least end like one)
+          * invalid json crashes etherpad upon access
+
+        Be aware that this query is pretty slow on large databases
         """
         query = """
         SELECT SUBSTR(`key`, 5) AS pad
             FROM store
-        WHERE `key` LIKE 'pad:%'
-            AND `key` NOT REGEXP ':(revs|chat):[0-9]+$'
+        WHERE `key` REGEXP '^pad:[^:]+$'
+            AND `key` NOT REGEXP '^pad:g\.[^\$]\$.+$'
             AND `value` REGEXP '.*}$'
         """
 
@@ -55,20 +60,6 @@ class EtherpadWrapper:
         db.execute(query)
 
         return db
-
-    def get_max_rev(self, pad):
-        """Get the latest revision number for a given pad name
-        """
-        query = """
-            SELECT
-                MAX(CAST(SUBSTRING_INDEX(`key`, ':', -1) AS UNSIGNED)) AS rev,
-                SUBSTR(`key`, 5) AS pad
-            FROM store
-            WHERE `key` LIKE '{}%';
-        """.format(pad)
-        db = self.get_cursor()
-        db.execute(query)
-        return db.fetchone()[0]
 
     def list_pads(self, out_file=False):
         """Prints all pads found to STDOUT
@@ -83,35 +74,38 @@ class EtherpadWrapper:
             for row in db.fetchall():
                 print(row[0])
 
-    def save_pads(self, location, list_file=False):
+    def save_pads(self, location, list_file=False, out_format='txt', banner=''):
         """Saves all pads to disk
         """
+        if out_format not in ['txt', 'html']:
+            return
+
         if not os.path.exists(location):
             os.makedirs(location)
 
         if list_file:
             with open(list_file, 'r') as list:
-                for pad in list:
-                    self.save_pad(location, pad)
+                for pad_name in list:
+                    self.save_pad(location, pad_name, out_format, banner)
         else:
             pads = self.get_pads()
             for pad in pads.fetchall():
-                try:
-                    pad_name = eval((pad[0]))[0]
-                except:
-                    pad_name = pad[0]
-                self.save_pad(location, pad_name)
+                pad_name = pad[0]
+                self.save_pad(location, pad_name, out_format, banner)
 
 
-    def save_pad(self, location, pad):
+    def save_pad(self, location, pad, pad_format, banner_file):
         url = os.getenv('URL')
         pad = pad.rstrip()
-        pad_url = '{}/p/{}/export/txt'.format(url, pad)
-        pad_file = '{}/{}.txt'.format(location, pad)
+        pad_url = '{}/p/{}/export/{}'.format(url, pad, pad_format)
+        pad_file = '{}/{}.{}'.format(location, pad, pad_format)
 
-        click.echo('Saving pad', nl=False)
-        click.echo(click.style(' %s ' % pad, bold=True), nl=False)
+        click.echo('Saving pad ', nl=False)
+        click.echo(click.style('{} ({})'.format(pad, pad_format), bold=True), nl=False)
 
+        if banner_file and os.path.isfile(banner_file):
+            with open(banner_file, "rb") as b:
+                banner_contents = b.read()
 
         try:
             if os.path.isfile(pad_file):
@@ -119,34 +113,31 @@ class EtherpadWrapper:
             else:
                 r = requests.get(pad_url, stream=True)
                 if r.status_code > 500:
-                    with open('error.log', 'a') as myfile:
-                        myfile.write(pad_url)
+                    with open('error.log', 'a') as logfile:
+                        logfile.write('{}\n'.format(pad_url))
                     click.echo(click.style('[%s]' % r.status_code, fg='orange'), nl=True)
+                    click.echo(click.style('Etherpad crashed! Press a key to retry.', fg='red'), nl=True)
+                    click.pause()
                     return
-                    # Those returning 5xx were crashing Etherpad upon access. Avoiding them for now.
-                    # timeout = 10
-                    # click.echo(click.style('[failed]', fg='red'), nl=True)
-                    # click.echo(click.style('Etherpad crashed! Press a key to retry.', fg='red'), nl=True)
-                    # click.pause()
-                    # self.save_pad(location, pad)
 
                 if r.status_code > 400:
                     with open('error.log', 'a') as logfile:
-                        logfile.write('[%s] %s' % (r.status_code, pad_url))
+                        logfile.write('{}\n'.format(pad_url))
                     click.echo(click.style('[%s]' % r.status_code, fg='orange'), nl=True)
                     return
 
                 with open(pad_file, 'wb') as f:
+                    f.write(banner_contents)
                     for chunk in r.iter_content(chunk_size=1024):
                         if chunk:
                             f.write(chunk)
                     click.echo(click.style('[done]', fg='green'), nl=True)
         except:
-            click.echo(click.style('An error occured while saving pad "%s"' % pad, fg='red'), nl=True)
+            click.echo(click.style('\n[{}] An error occured while saving pad "{}"'.format(r.status_code, pad), fg='red'), nl=True)
             pass
 
 
-    def dump_to_s3(self, directory, list_file):
+    def dump_to_s3(self, directory, list_file, file_format='txt'):
         s3_key = os.getenv('S3_KEY')
         s3_secret = os.getenv('S3_SECRET')
         s3_bucket = os.getenv('S3_BUCKET')
@@ -154,14 +145,6 @@ class EtherpadWrapper:
         if not list_file:
             list_file = 'pads.lst'
             self.list_pads(out_file=list_file)
-
-        # s3 = tinys3.Connection(s3_key, s3_secret, default_bucket=s3_bucket)
-        # Create an S3 client
-        ## s3 = boto3.client(
-        ##     's3',
-        ##     aws_access_key_id=s3_key,
-        ##     aws_secret_access_key=s3_secret
-        ## )
 
         s3 = boto3.resource(
             's3',
@@ -173,15 +156,16 @@ class EtherpadWrapper:
         with open(list_file, 'r') as lst:
             for pad in lst:
                 click.echo('Saving pad', nl=False)
-                click.echo(click.style(' %s ' % pad.rstrip(), bold=True), nl=False)
+                click.echo(click.style(' %s (%s) ' % (pad.rstrip(), file_format), bold=True), nl=False)
 
-                file_name = '%s/%s.txt' % (directory, pad.rstrip())
+                file_name = '%s/%s.%s' % (directory, pad.rstrip(), file_format)
+                if file_format == 'txt':
+                    s3_name = 'p/%s' % pad.rstrip()
+                else:
+                    s3_name = 'p/%s.%s' % (pad.rstrip(), file_format)
                 if not os.path.isfile(file_name):
                     click.echo(click.style('%s not found' % file_name, fg='yellow'))
                     continue
                 f = open(file_name, 'rb')
-                # s3.upload('p/%s' % pad.rstrip(), f, content_type='text/html')
-                # res = s3.Bucket(s3_bucket).put_object(Key='p/%s' % pad.rstrip(), Body=f, ContentType='text/html')
-                res = bucket.upload_file(file_name, 'p/%s' % pad.rstrip(), ExtraArgs={'ContentType': 'text/html; charset=utf-8'})
+                res = bucket.upload_file(file_name, s3_name, ExtraArgs={'ContentType': 'text/html; charset=utf-8'})
                 click.echo(click.style('[done]', fg='green'), nl=True)
-                # res = s3.upload_file(file_name, s3_bucket, 'p/%s' % pad.rstrip(), ContentType='text/html')
