@@ -161,7 +161,7 @@ class EtherpadWrapper:
                 click.echo(click.style(' %s (%s) ' % (pad.rstrip(), file_format), bold=True), nl=False)
 
                 file_name = '%s/%s.%s' % (directory, pad.rstrip(), file_format)
-                if file_format == 'txt':
+                if file_format == 'html':
                     s3_name = 'p/%s' % pad.rstrip()
                 else:
                     s3_name = 'p/%s.%s' % (pad.rstrip(), file_format)
