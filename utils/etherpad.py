@@ -114,7 +114,7 @@ class EtherpadWrapper:
                 r = requests.get(pad_url, stream=True)
                 if r.status_code > 500:
                     with open('error.log', 'a') as logfile:
-                        logfile.write('{}\n'.format(pad_url))
+                        logfile.write('{}\n'.format(pad))
                     click.echo(click.style('[%s]' % r.status_code, fg='orange'), nl=True)
                     click.echo(click.style('Etherpad crashed! Press a key to retry.', fg='red'), nl=True)
                     click.pause()
@@ -122,7 +122,7 @@ class EtherpadWrapper:
 
                 if r.status_code > 400:
                     with open('error.log', 'a') as logfile:
-                        logfile.write('{}\n'.format(pad_url))
+                        logfile.write('{}\n'.format(pad))
                     click.echo(click.style('[%s]' % r.status_code, fg='orange'), nl=True)
                     return
 
@@ -133,7 +133,9 @@ class EtherpadWrapper:
                             f.write(chunk)
                     click.echo(click.style('[done]', fg='green'), nl=True)
         except:
-            click.echo(click.style('\n[{}] An error occured while saving pad "{}"'.format(r.status_code, pad), fg='red'), nl=True)
+            with open('error.log', 'a') as logfile:
+                logfile.write('{}\n'.format(pad))
+            click.echo(click.style('\nAn error occured while saving pad "{}"'.format(pad), fg='red'), nl=True)
             pass
 
 
@@ -155,7 +157,7 @@ class EtherpadWrapper:
 
         with open(list_file, 'r') as lst:
             for pad in lst:
-                click.echo('Saving pad', nl=False)
+                click.echo('Uploading pad', nl=False)
                 click.echo(click.style(' %s (%s) ' % (pad.rstrip(), file_format), bold=True), nl=False)
 
                 file_name = '%s/%s.%s' % (directory, pad.rstrip(), file_format)

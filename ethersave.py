@@ -19,7 +19,7 @@ def ls():
 @click.option('--directory', '-d', help='Directory for storing the dump', default='./dumps')
 @click.option('--inputfile', '-i', help='Plain text file containing a list of pad names, one per line', default=False)
 @click.option('formats', '--format', '-f', help='Format of the final output (txt / html)', default=['txt'], multiple=True)
-@click.option('banner', '--banner', '-b', help='Small static banner to be injected at the top of the archived pads')
+@click.option('--banner', '-b', help='Small static banner to be injected at the top of the archived pads')
 def archive(directory, inputfile, formats, banner):
     for out_format in formats:
         eth.save_pads(
