@@ -69,6 +69,9 @@ Commands:
   * Default output directory is `./dumps`
 * Upload all dumped pads to S3
   * Can use a list of pads, dumps directory or will just collect everything from scratch and upload to a bucket configured through env vars
+* Add a static banner to the dumps
+  * Only suppors one file to be prepended to the saved pads
+  * i.e. if you want to add separate banner to HTML and text dumps, you will have to launch the archiving process for each format individually
 
 The recommended workflow is:
 
