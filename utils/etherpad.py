@@ -156,8 +156,11 @@ class EtherpadWrapper:
         bucket = s3.Bucket(s3_bucket)
 
         with open(list_file, 'r') as lst:
+            num_pads = sum(1 for line in open(list_file))
+            counter = 0
             for pad in lst:
-                click.echo('Uploading pad', nl=False)
+                counter += 1
+                click.echo('{}/{}. Uploading pad'.format(counter, num_pads), nl=False)
                 click.echo(click.style(' %s (%s) ' % (pad.rstrip(), file_format), bold=True), nl=False)
 
                 file_name = '%s/%s.%s' % (directory, pad.rstrip(), file_format)
